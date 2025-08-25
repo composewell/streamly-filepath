@@ -45,11 +45,11 @@ fromByteArray (Array mba@(MutByteArray mbarr#) start end) =
         then OsString $ PosixString (SBS (unsafeCoerce# mbarr#))
         else let !(MutByteArray arr#) =
                     unsafePerformIO
-                        $ MBA.cloneSliceUnsafe start (end - start) mba
+                        $ MBA.unsafeCloneSlice start (end - start) mba
              in OsString $ PosixString (SBS (unsafeCoerce# arr#))
 
 toPath :: OsPath -> Path
-toPath = Path.fromByteArrayUnsafe . toByteArray
+toPath = Path.unsafeFromArray . toByteArray
 
 fromPath :: Path -> OsPath
-fromPath = fromByteArray . Path.toByteArray
+fromPath = fromByteArray . Path.toArray

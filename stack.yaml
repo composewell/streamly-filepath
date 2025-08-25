@@ -1,0 +1,23 @@
+resolver: lts-22.43
+packages:
+- '.'
+extra-deps:
+#- streamly-core-0.2.0
+#- streamly-0.10.0
+#- fusion-plugin-0.2.6
+- git: https://github.com/composewell/streamly
+  commit: 4aa7ae215f64cf98f7b3c175d3a8c47c8bd3177e
+- git: https://github.com/composewell/streamly
+  commit: 4aa7ae215f64cf98f7b3c175d3a8c47c8bd3177e
+  subdirs:
+    - core
+
+rebuild-ghc-options: true
+
+# For mac ports installed SDL library on Mac OS X
+extra-include-dirs:
+- /opt/local/include
+
+flags:
+  mintty:
+    Win32-2-13-1: false
