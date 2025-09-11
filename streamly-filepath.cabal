@@ -45,6 +45,7 @@ common compile-options
     -Wno-monomorphism-restriction
     -Wno-prepositive-qualified-module
     -Wno-unsafe
+    -Wno-unused-packages
   if !impl(ghc < 9.2)
     ghc-options:
       -Wno-missing-kind-signatures
