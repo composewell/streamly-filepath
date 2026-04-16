@@ -3,3 +3,5 @@ stack.yaml
 .github/workflows/packcheck.yml
 .packcheck.ignore
 appveyor.yml
+flake.lock
+flake.nix
