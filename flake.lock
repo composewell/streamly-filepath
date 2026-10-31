@@ -13,12 +13,12 @@
         "rev": "71f2b6792a9f64be2c4bca5050cb1e08edd625b2",
         "revCount": 122,
         "type": "git",
-        "url": "ssh://git@github.com/composewell/streamly-packages"
+        "url": "https://github.com/composewell/streamly-packages"
       },
       "original": {
         "rev": "71f2b6792a9f64be2c4bca5050cb1e08edd625b2",
         "type": "git",
-        "url": "ssh://git@github.com/composewell/streamly-packages"
+        "url": "https://github.com/composewell/streamly-packages"
       }
     },
     "basepkgs_2": {
