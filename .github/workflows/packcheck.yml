@@ -187,7 +187,7 @@ jobs:
             #pack_options: >-
             #  CABAL_PROJECT=cabal.project
 
-          - name: ghc-9.10.3
+          - name: lts-22.44
             runner: ubuntu-latest
             command: stack
             # WARNING! cannot use # comments inside pack_options.
