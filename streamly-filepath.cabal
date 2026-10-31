@@ -79,5 +79,7 @@ test-suite test
       base
     -- Path.fromString truncates non-ASCII paths in streamly-core 0.3.0
     , streamly-core >= 0.3.1
+    , bytestring
     , filepath
+    , os-string
     , streamly-filepath
