@@ -17,7 +17,7 @@ Checked against the sources of `streamly-core` 0.2.3, 0.3.0, 0.3.1 and
 | 4  | Low      | Documentation               | Fixed      |
 | 5  | Medium   | Missing tests               | Fixed      |
 | 6  | Low      | Missing API                 | Open       |
-| 7  | Low      | Missing API                 | Open       |
+| 7  | Low      | Missing API                 | Fixed      |
 | 8  | Info     | Aliasing                    | Documented |
 | 9  | Info     | Build config                | Open       |
 | 10 | Info     | Build config                | Open       |
@@ -121,9 +121,23 @@ modules whose API may change between minor versions.
 ## 7. No conversion for `OsString`
 
 `OsPath` is a type synonym for `OsString`, so the functions already accept an
-`OsString`. There is no conversion between `OsString` and a plain streamly
-`Array OsWord` (without path validation), which would be useful for
-environment variables and command line arguments that are not paths.
+`OsString`. There was no conversion between `OsString` and a plain streamly
+`Array OsWord` without path validation, which is needed for environment
+variables and command line arguments that are not paths. `unsafeToPath`
+skips validation but produces a `Path`.
+
+Fix: the new module `Streamly.Compat.OsString` exports
+
+* `toArray :: OsString -> Array OsWord`, which shares the buffer and never
+  copies, and
+* `fromArray :: Array OsWord -> OsString`, which shares the buffer when the
+  array spans the whole buffer and copies otherwise.
+
+Neither function validates the contents; the empty string and strings
+containing NUL convert without an exception. `Streamly.Compat.OsPath` now
+uses these two functions. The test suite checks round trips, the three
+array layouts for `fromArray`, and that `toArray` gives the same words as
+`Path.fromString_` for valid paths.
 
 ## 8. Shared buffers
 
