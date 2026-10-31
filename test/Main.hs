@@ -4,10 +4,12 @@ import Control.Exception (SomeException, try)
 import Control.Monad (unless, when)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Streamly.Compat.OsPath (fromPath, toPath, unsafeToPath)
+import Streamly.Internal.Data.Array (Array)
 import Streamly.FileSystem.Path (Path, OsWord)
 import System.Exit (exitFailure)
 import System.OsPath (OsPath)
 
+import qualified Streamly.Compat.OsString as OsString
 import qualified Streamly.Internal.Data.Array as Array
 import qualified Streamly.Internal.Data.MutArray as MutArray
 import qualified Streamly.Internal.FileSystem.Path as Path
@@ -26,26 +28,32 @@ check failures name ok =
 osp :: String -> IO OsPath
 osp = OsPath.encodeUtf
 
--- | Create a Path from an array that has spare capacity at the end of its
--- buffer.
-withCapacity :: Path -> IO Path
-withCapacity p = do
-    let arr = Path.toArray p
+-- | Copy an array to a new buffer that has spare capacity at the end.
+arrWithCapacity :: Array OsWord -> IO (Array OsWord)
+arrWithCapacity arr = do
     marr <-
         MutArray.emptyOf (Array.length arr + 64)
             :: IO (MutArray.MutArray OsWord)
     marr1 <- MutArray.splice marr (Array.unsafeThaw arr)
-    return $ Path.unsafeFromArray (Array.unsafeFreeze marr1)
+    return $ Array.unsafeFreeze marr1
+
+-- | Copy an array to a new buffer at a non-zero offset.
+arrWithOffset :: Array OsWord -> Array OsWord
+arrWithOffset arr =
+    let prefix = Path.toArray (Path.fromString_ "xyz")
+        arr1 = Array.fromList (Array.toList prefix ++ Array.toList arr)
+     in snd (Array.unsafeBreakAt (Array.length prefix) arr1)
+
+-- | Create a Path from an array that has spare capacity at the end of its
+-- buffer.
+withCapacity :: Path -> IO Path
+withCapacity p =
+    Path.unsafeFromArray <$> arrWithCapacity (Path.toArray p)
 
 -- | Create a Path from an array that does not start at the beginning of its
 -- buffer.
 withOffset :: Path -> Path
-withOffset p =
-    let arr = Path.toArray p
-        prefix = Path.toArray (Path.fromString_ "xyz")
-        arr1 = Array.fromList (Array.toList prefix ++ Array.toList arr)
-     in Path.unsafeFromArray
-            (snd (Array.unsafeBreakAt (Array.length prefix) arr1))
+withOffset = Path.unsafeFromArray . arrWithOffset . Path.toArray
 
 -------------------------------------------------------------------------------
 -- Tests
@@ -87,6 +95,27 @@ testSample failures s = do
     check failures (name "round trip Path")
         (Path.toString (unsafeToPath (fromPath p)) == s)
 
+-- | OsString conversions do not validate, so they also work for strings
+-- that are not valid paths.
+testOsString :: IORef Int -> String -> IO ()
+testOsString failures s = do
+    o <- osp s
+    let arr = OsString.toArray o
+        name x = x ++ " " ++ show s
+    check failures (name "OsString.toArray empty")
+        (null s == Array.null arr)
+    check failures (name "OsString round trip")
+        (OsString.fromArray arr == o)
+    arrC <- arrWithCapacity arr
+    check failures (name "OsString.fromArray with capacity")
+        (OsString.fromArray arrC == o)
+    check failures (name "OsString.fromArray with offset")
+        (OsString.fromArray (arrWithOffset arr) == o)
+    unless (null s || '\0' `elem` s) $ do
+        let parr = Path.toArray (Path.fromString_ s)
+        check failures (name "OsString.toArray matches Path")
+            (Array.toList arr == Array.toList parr)
+
 testInvalid :: IORef Int -> String -> IO ()
 testInvalid failures s = do
     o <- osp s
@@ -99,6 +128,7 @@ main = do
     failures <- newIORef 0
     mapM_ (testSample failures) samples
     mapM_ (testInvalid failures) ["", "a\0b"]
+    mapM_ (testOsString failures) (samples ++ ["", "a\0b"])
     n <- readIORef failures
     when (n > 0) $ do
         putStrLn $ show n ++ " test(s) failed."
