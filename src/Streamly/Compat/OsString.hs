@@ -1,9 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE PackageImports #-}
-
-{-# OPTIONS_GHC -Wno-deprecations #-}
 
 -- |
 -- Module      : Streamly.Compat.OsString
@@ -33,50 +28,18 @@ module Streamly.Compat.OsString
     )
 where
 
-#if MIN_VERSION_filepath(1,5,0)
-import System.OsString.Internal.Types (OsString(..))
+import Streamly.Compat.Internal.Array
+    ( OsString(..)
 #if defined(mingw32_HOST_OS)
-import System.OsString.Internal.Types (WindowsString(..))
+    , WindowsString(..)
 #else
-import System.OsString.Internal.Types (PosixString(..))
+    , PosixString(..)
 #endif
-import "os-string" System.OsString.Data.ByteString.Short (ShortByteString(..))
-#else
-import "filepath" System.OsString.Internal.Types (OsString(..))
-#if defined(mingw32_HOST_OS)
-import "filepath" System.OsString.Internal.Types (WindowsString(..))
-#else
-import "filepath" System.OsString.Internal.Types (PosixString(..))
-#endif
-import "filepath" System.OsPath.Data.ByteString.Short (ShortByteString(..))
-#endif
-import Streamly.Internal.Data.MutByteArray (MutByteArray(..))
-import Streamly.Internal.Data.Array (Array(..))
+    , fromShortByteString
+    , toShortByteString
+    )
+import Streamly.Internal.Data.Array (Array)
 import Streamly.FileSystem.Path (OsWord)
-import GHC.Exts (sizeofByteArray#, Int(..), unsafeCoerce#)
-import System.IO.Unsafe (unsafePerformIO)
-
-import qualified Streamly.Internal.Data.MutByteArray as MBA
-
-#if defined(mingw32_HOST_OS)
-getString :: WindowsString -> ShortByteString
-getString = getWindowsString
-#else
-getString :: PosixString -> ShortByteString
-getString = getPosixString
-#endif
-
-#if defined(mingw32_HOST_OS)
-mkString :: ShortByteString -> WindowsString
-mkString = WindowsString
-#else
-mkString :: ShortByteString -> PosixString
-mkString = PosixString
-#endif
-
--- Note: MutableByteArray# and ByteArray# are the same heap object (ARR_WORDS)
--- and unsafeFreezeByteArray# is a no-op, so coercing one to the other is
--- equivalent to an unsafe freeze or thaw.
 
 -- | Convert an 'OsString' to an 'Array' of 'OsWord' at zero cost. The array
 -- shares the buffer of the 'OsString'. The contents are not validated.
@@ -88,10 +51,11 @@ mkString = PosixString
 --
 {-# INLINE toArray #-}
 toArray :: OsString -> Array OsWord
-toArray s =
-    let !(SBS barr#) = getString $ getOsString s
-        mbarr = MutByteArray (unsafeCoerce# barr#)
-      in Array mbarr 0 (I# (sizeofByteArray# barr#))
+#if defined(mingw32_HOST_OS)
+toArray = fromShortByteString . getWindowsString . getOsString
+#else
+toArray = fromShortByteString . getPosixString . getOsString
+#endif
 
 -- | Convert an 'Array' of 'OsWord' to an 'OsString'. The contents are not
 -- validated.
@@ -99,15 +63,12 @@ toArray s =
 -- If the array spans its whole underlying buffer then the buffer is shared at
 -- zero cost. Otherwise, e.g. when the array is a slice of a larger array or
 -- has spare capacity at the end, it is copied to a new buffer, because a
--- 'ShortByteString' cannot represent a slice.
+-- @ShortByteString@ cannot represent a slice.
 --
 {-# INLINE fromArray #-}
 fromArray :: Array OsWord -> OsString
-fromArray (Array mba@(MutByteArray mbarr#) start end) =
-    let sz = I# (sizeofByteArray# (unsafeCoerce# mbarr#))
-     in if start == 0 && end == sz
-        then OsString $ mkString (SBS (unsafeCoerce# mbarr#))
-        else let !(MutByteArray arr#) =
-                    unsafePerformIO
-                        $ MBA.unsafeCloneSlice start (end - start) mba
-             in OsString $ mkString (SBS (unsafeCoerce# arr#))
+#if defined(mingw32_HOST_OS)
+fromArray = OsString . WindowsString . toShortByteString
+#else
+fromArray = OsString . PosixString . toShortByteString
+#endif

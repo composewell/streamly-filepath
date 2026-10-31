@@ -10,10 +10,11 @@
 -- Conversion between the 'Path' type from @streamly-core@ and the 'OsPath'
 -- type from @filepath@.
 --
--- Both types store the path as an array of 'OsWord' in the platform encoding:
--- 'Data.Word.Word8' bytes on Posix and little-endian 'Data.Word.Word16' units
--- (UTF-16LE) on Windows. A conversion therefore does not decode or encode the
--- path. When the underlying buffer is used whole it is shared, not copied.
+-- Both types store the path as an array of 'Streamly.FileSystem.Path.OsWord'
+-- in the platform encoding: 'Data.Word.Word8' bytes on Posix and
+-- little-endian 'Data.Word.Word16' units (UTF-16LE) on Windows. A conversion
+-- therefore does not decode or encode the path. When the underlying buffer is
+-- used whole it is shared, not copied.
 --
 -- The 'Path' and the 'OsPath' resulting from a zero-copy conversion share the
 -- same memory. Do not mutate the array of a 'Path' (e.g. using
@@ -30,12 +31,10 @@ module Streamly.Compat.OsPath
     )
 where
 
-import Control.Monad.Catch (MonadThrow, throwM)
-import Foreign.Storable (sizeOf)
+import Control.Monad.Catch (MonadThrow)
+import Streamly.Compat.Internal.Array (checkWordSize)
 import Streamly.Compat.OsString (fromArray, toArray)
-import Streamly.Internal.Data.Array (Array(..))
-import Streamly.Internal.Data.Path (PathException(..))
-import Streamly.FileSystem.Path (Path, OsWord)
+import Streamly.FileSystem.Path (Path)
 import System.OsPath (OsPath)
 
 import qualified Streamly.Internal.FileSystem.Path as Path
@@ -57,21 +56,16 @@ unsafeToPath = Path.unsafeFromArray . toArray
 -- 'Streamly.FileSystem.Path.validatePath', which takes time proportional to
 -- the length of the path.
 --
--- Throws an 'InvalidPath' exception if the path is not valid, for example if
+-- Throws an @InvalidPath@ exception if the path is not valid, for example if
 -- it is empty or contains a NUL character. On Windows, also throws an
--- 'InvalidPath' exception if the length of the 'OsPath' in bytes is odd.
+-- @InvalidPath@ exception if the length of the 'OsPath' in bytes is odd.
 --
 {-# INLINE toPath #-}
 toPath :: MonadThrow m => OsPath -> m Path
-toPath p =
-    let arr@(Array _ start end) = toArray p
-        len = end - start
-        wordSize = sizeOf (undefined :: OsWord)
-     in if len `rem` wordSize /= 0
-        then throwM $ InvalidPath
-            $ "Encoded path length " ++ show len
-                ++ " is not a multiple of " ++ show wordSize ++ " bytes."
-        else Path.fromArray arr
+toPath p = do
+    let arr = toArray p
+    checkWordSize arr
+    Path.fromArray arr
 
 -- | Adapt a Streamly 'Path' type to 'OsPath' type. If the array of the
 -- 'Path' spans its whole underlying buffer then the buffer is shared at zero
