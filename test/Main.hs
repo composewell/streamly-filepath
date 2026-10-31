@@ -8,6 +8,9 @@ module Main (main) where
 import Control.Exception (SomeException, evaluate, fromException, try)
 import Control.Monad (unless, when)
 import Data.Bits (shiftR, (.&.))
+#if !MIN_VERSION_streamly_core(0,3,1)
+import Data.Char (isAscii)
+#endif
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.List (intercalate, isInfixOf)
@@ -315,9 +318,19 @@ testGC failures c s = do
     check failures (convName c ++ " fromPath after GC")
         (toString c (unsafeToPath c o1) == s)
 
+-- | Whether streamly's fromString_ encodes the string correctly.
+-- Path.fromString in streamly-core 0.3.0 truncates non-ASCII paths.
+fromStringWorks :: String -> Bool
+#if MIN_VERSION_streamly_core(0,3,1)
+fromStringWorks _ = True
+#else
+fromStringWorks = all isAscii
+#endif
+
 testConv :: (Eq s, Eq a, Unbox a, Num a) =>
     IORef Int -> Conv s p a -> [String] -> [[a]] -> [String] -> IO ()
-testConv failures c valid raw invalid = do
+testConv failures c samples raw invalid = do
+    let valid = filter fromStringWorks samples
     mapM_ (testValid failures c) valid
     mapM_ (testZeroCopy failures c) valid
     mapM_ (testRawWords failures c) raw

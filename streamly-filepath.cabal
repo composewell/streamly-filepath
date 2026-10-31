@@ -77,8 +77,7 @@ test-suite test
   ghc-options: -rtsopts "-with-rtsopts=-M1G"
   build-depends:
       base
-    -- Path.fromString truncates non-ASCII paths in streamly-core 0.3.0
-    , streamly-core >= 0.3.1
+    , streamly-core
     , bytestring
     , filepath
     , os-string
