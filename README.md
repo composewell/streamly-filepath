@@ -1,9 +1,15 @@
 # Streamly compatibility with filepath
 
-Facilities for interconverting between the `Path` type from streamly
-package and `OsPath` from the `filepath` package
-(`Streamly.Compat.OsPath`), and between a streamly `Array` of `OsWord` and
-`OsString` (`Streamly.Compat.OsString`).
+Facilities for interconverting between the path types of the streamly
+package and the `filepath` package:
+
+* `Streamly.Compat.OsPath`: `Path` and `OsPath`.
+* `Streamly.Compat.PosixPath`: `PosixPath` and `PosixPath`
+  (`PosixString`), on any platform.
+* `Streamly.Compat.WindowsPath`: `WindowsPath` and `WindowsPath`
+  (`WindowsString`), on any platform.
+* `Streamly.Compat.OsString`: a streamly `Array` of `OsWord` and
+  `OsString`, without path validation.
 
 # Streamly
 

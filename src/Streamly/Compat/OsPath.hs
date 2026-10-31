@@ -22,7 +22,8 @@
 -- an 'OsPath'.
 --
 -- To convert an @OsString@ to an array without path validation use
--- "Streamly.Compat.OsString".
+-- "Streamly.Compat.OsString". To convert Posix or Windows paths on any
+-- platform use "Streamly.Compat.PosixPath" or "Streamly.Compat.WindowsPath".
 
 module Streamly.Compat.OsPath
     ( unsafeToPath
