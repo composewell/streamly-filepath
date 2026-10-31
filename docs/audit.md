@@ -87,19 +87,41 @@ heap object (`ARR_WORDS`) and `unsafeFreezeByteArray#` is a no-op, so
 
 ## 5. No test suite
 
-The package had no tests, so CI built the library only. A test suite
-`test/Main.hs` now checks, for ASCII and non-ASCII paths:
+The package had no tests, so CI built the library only. The test suite
+`test/Main.hs` now runs the same checks for each conversion module
+(`OsPath`, `PosixPath`, `WindowsPath` and `OsString`):
 
-* `Path.toString (unsafeToPath o) == s` and the same for `toPath`, where `o`
-  is the `OsPath` made from the string `s` by `System.OsPath.encodeUtf`.
-  This checks that both libraries use the same encoding.
-* `fromPath p == o`, where `p = Path.fromString_ s`, for three layouts of
-  the array of `p`: the whole buffer (zero-copy branch), an array with spare
-  capacity after the end, and a slice at a non-zero offset (both copying
-  branches).
-* Round trips `OsPath -> Path -> OsPath` and `Path -> OsPath -> Path`.
-* `toPath` throws an exception for the empty path and for a path containing
-  NUL.
+* Encoding agreement: for a string `s`, `toString (unsafeToPath o) == s`
+  and the same for `toPath`, where `o` is made from `s` by filepath's
+  `encodeUtf`; the words of the streamly path equal those made by streamly's
+  `fromString_`.
+* `fromPath p == o` for four layouts of the array of `p`: the whole buffer
+  (zero-copy branch), spare capacity after the end, a slice at a non-zero
+  offset (both copying branches), and a pinned buffer.
+* Round trips in both directions.
+* Zero copy, checked by buffer identity (`sameMutableByteArray#`):
+  `unsafeToPath`, `toPath` and `fromPath` of a whole buffer share the
+  buffer; `fromPath` of a slice does not.
+* A copy made by `fromPath` does not change when the source buffer is
+  written to afterwards.
+* Empty arrays and an empty slice at a non-zero offset convert to the empty
+  string.
+* Words that are not valid in the encoding are preserved unchanged: invalid
+  UTF-8 bytes (`ff`, a truncated sequence, an encoded surrogate) for Posix,
+  lone surrogates and `ffff` for Windows.
+* Shared buffers remain valid after `performMajorGC`.
+* `toPath` throws a `PathException` (checked by type) for invalid paths:
+  empty and NUL-containing paths; on Windows also control characters,
+  `< > : " | ? *`, reserved names (`CON`, `con.txt`, `nul`, `Com1`,
+  `LPT9`), `C:\\x`, `\\\x` and `\\prn\x`.
+* Valid paths include repeated separators, `.` and `..` components,
+  spaces, control characters (Posix), combining characters, characters
+  outside the Basic Multilingual Plane, drive-relative and UNC paths
+  (Windows), a path of about 10 KB, and 100 pseudo random paths for each of
+  Posix and Windows.
+
+Mutation checks: making `fromPath` always copy, or always share the buffer,
+makes the zero-copy, copy-independence and layout tests fail.
 
 The test suite runs with `-M1G` as the RTS heap limit.
 
@@ -219,9 +241,10 @@ so `fromPath` of the streamly path is not equal to it. The changelog of
 unicode chars are present".
 
 The conversions in this package copy the array as is and are correct with
-0.3.0. The library bound stays at `>= 0.3`; the test suite requires
-`streamly-core >= 0.3.1` because it builds paths with `Path.fromString_`.
-Users who build paths from non-ASCII strings should use 0.3.1 or later.
+0.3.0. The library bound stays at `>= 0.3`. With 0.3.0 the test suite skips
+the non-ASCII sample paths, because it builds the expected streamly paths
+with `fromString_`; all other tests run. Users who build paths from
+non-ASCII strings should use 0.3.1 or later.
 
 ## Verification
 
@@ -231,9 +254,15 @@ GHC 9.6.7 on Linux, with the RTS heap limit `-M3G` for GHC:
 |-------|---------------|-----------|-----------|--------|
 | cabal | 0.3.3         | 1.4.300.1 | 2.0.11    | Build and tests pass |
 | cabal | 0.3.3         | 1.5.5.0   | 2.0.11    | Build and tests pass |
+| cabal | 0.3.2         | 1.4.300.1 | 2.0.11    | Build and tests pass |
 | cabal | 0.3.1         | 1.4.300.1 | 2.0.11    | Build and tests pass |
-| cabal | 0.3.0         | 1.4.300.1 | 2.0.11    | Library builds; see item 11 |
+| cabal | 0.3.0         | 1.4.300.1 | 2.0.11    | Pass, ASCII samples only |
 | stack | 0.3.3         | 1.4.301.0 | 2.0.7     | Build and tests pass |
+
+The GitHub workflow has one job for each supported `streamly-core`
+version (0.3.0, 0.3.1, 0.3.2, 0.3.3), each pinned with `--constraint` and
+built with GHC 9.12.4 on Linux. The other jobs use the version picked by the
+solver. hlint reports no hints for `src` and `test`.
 
 The library builds without warnings under `-Weverything`, and `cabal
 haddock` reports no warnings.
