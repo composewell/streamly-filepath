@@ -1,5 +1,9 @@
 packages: streamly-filepath.cabal
 
+-- Limit the heap used by GHC when compiling.
+package *
+  ghc-options: +RTS -M3G -RTS
+
 -- source-repository-package
 --   type: git
 --   location: https://github.com/composewell/streamly.git
