@@ -55,6 +55,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Streamly.Compat.OsPath
+    Streamly.Compat.OsString
   build-depends:
       base              >= 4.8 && < 5
     -- Streamly.FileSystem.Path and OsWord were introduced in 0.3.0
