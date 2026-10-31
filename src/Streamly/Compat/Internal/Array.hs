@@ -27,6 +27,7 @@ module Streamly.Compat.Internal.Array
     )
 where
 
+import Control.Monad (when)
 import Control.Monad.Catch (MonadThrow, throwM)
 #if MIN_VERSION_filepath(1,5,0)
 import System.OsString.Internal.Types
@@ -79,8 +80,7 @@ checkWordSize :: forall m a. (MonadThrow m, Storable a) => Array a -> m ()
 checkWordSize (Array _ start end) =
     let len = end - start
         wordSize = sizeOf (undefined :: a)
-     in if len `rem` wordSize /= 0
-        then throwM $ InvalidPath
+     in when (len `rem` wordSize /= 0)
+            $ throwM $ InvalidPath
             $ "Encoded path length " ++ show len
                 ++ " is not a multiple of " ++ show wordSize ++ " bytes."
-        else pure ()
