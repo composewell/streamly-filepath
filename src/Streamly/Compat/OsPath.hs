@@ -33,7 +33,7 @@ module Streamly.Compat.OsPath
     )
 where
 
-import Control.Monad.Catch (MonadThrow)
+import Control.Monad.Catch (MonadThrow, throwM)
 #if MIN_VERSION_filepath(1,5,0)
 import System.OsString.Internal.Types (OsString(..))
 #if defined(mingw32_HOST_OS)
@@ -51,8 +51,10 @@ import "filepath" System.OsString.Internal.Types (PosixString(..))
 #endif
 import "filepath" System.OsPath.Data.ByteString.Short (ShortByteString(..))
 #endif
+import Foreign.Storable (sizeOf)
 import Streamly.Internal.Data.MutByteArray (MutByteArray(..))
 import Streamly.Internal.Data.Array (Array(..))
+import Streamly.Internal.Data.Path (PathException(..))
 import Streamly.FileSystem.Path (Path, OsWord)
 import System.OsPath (OsPath)
 import GHC.Exts (sizeofByteArray#, Int(..), unsafeCoerce#)
@@ -107,7 +109,8 @@ fromOsWordArray (Array mba@(MutByteArray mbarr#) start end) =
 --
 -- /Unsafe/: The user is responsible to make sure that the 'OsPath' is valid as
 -- per 'Streamly.FileSystem.Path.validatePath'. For example, an empty 'OsPath'
--- results in an invalid 'Path'.
+-- results in an invalid 'Path'. On Windows the length of the 'OsPath' in bytes
+-- must be even.
 --
 {-# INLINE unsafeToPath #-}
 unsafeToPath :: OsPath -> Path
@@ -119,11 +122,20 @@ unsafeToPath = Path.unsafeFromArray . toOsWordArray
 -- the length of the path.
 --
 -- Throws an 'InvalidPath' exception if the path is not valid, for example if
--- it is empty or contains a NUL character.
+-- it is empty or contains a NUL character. On Windows, also throws an
+-- 'InvalidPath' exception if the length of the 'OsPath' in bytes is odd.
 --
 {-# INLINE toPath #-}
 toPath :: MonadThrow m => OsPath -> m Path
-toPath = Path.fromArray . toOsWordArray
+toPath p =
+    let arr@(Array _ start end) = toOsWordArray p
+        len = end - start
+        wordSize = sizeOf (undefined :: OsWord)
+     in if len `rem` wordSize /= 0
+        then throwM $ InvalidPath
+            $ "Encoded path length " ++ show len
+                ++ " is not a multiple of " ++ show wordSize ++ " bytes."
+        else Path.fromArray arr
 
 -- | Adapt a Streamly 'Path' type to 'OsPath' type. If the array of the
 -- 'Path' spans its whole underlying buffer then the buffer is shared at zero
