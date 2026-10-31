@@ -16,11 +16,11 @@ Checked against the sources of `streamly-core` 0.2.3, 0.3.0, 0.3.1 and
 | 3  | Low      | Documentation               | Fixed      |
 | 4  | Low      | Documentation               | Fixed      |
 | 5  | Medium   | Missing tests               | Fixed      |
-| 6  | Low      | Missing API                 | Open       |
+| 6  | Low      | Missing API                 | Fixed      |
 | 7  | Low      | Missing API                 | Fixed      |
 | 8  | Info     | Aliasing                    | Documented |
-| 9  | Info     | Build config                | Open       |
-| 10 | Info     | Build config                | Open       |
+| 9  | Info     | Build config                | Fixed      |
+| 10 | Info     | Build config                | Fixed      |
 | 11 | Medium   | Interoperability (upstream) | Documented |
 
 ## 1. Wrong lower bound on streamly-core
@@ -111,12 +111,34 @@ The test suite runs with `-M1G` as the RTS heap limit.
 provides `PosixPath` (array of `Word8`) and `WindowsPath` (array of `Word16`)
 in `Streamly.Internal.FileSystem.PosixPath` and
 `Streamly.Internal.FileSystem.WindowsPath`. The representations match, so
-the same zero-copy conversion applies, but the package only converts the
+the same zero-copy conversion applies, but the package only converted the
 platform `OsPath` and `Path`. A program that handles Windows paths on Linux,
-or Posix paths on Windows, cannot use this package.
+or Posix paths on Windows, could not use this package.
 
-Not implemented here, because the `streamly-core` types live in internal
-modules whose API may change between minor versions.
+Fix: the new modules `Streamly.Compat.PosixPath` and
+`Streamly.Compat.WindowsPath` export `unsafeToPath`, `toPath` and `fromPath`
+with the same costs as `Streamly.Compat.OsPath`:
+
+* `PosixString -> PosixPath` and back, validated with the Posix rules.
+* `WindowsString -> WindowsPath` and back, validated with the Windows rules
+  (drive and UNC roots, reserved names such as `CON`, disallowed characters
+  such as `>`). `toPath` also throws an `InvalidPath` exception if the
+  length in bytes is odd.
+
+Both modules work on every platform. The `ShortByteString` and `Array`
+conversion code is shared by all modules in the hidden module
+`Streamly.Compat.Internal.Array`.
+
+The streamly types come from internal modules of `streamly-core`, whose API
+may change in a minor version; the `< 0.4` upper bound on `streamly-core`
+does not protect against that.
+
+The test suite runs the same checks for `OsPath`, `PosixPath` and
+`WindowsPath`, including Windows paths with drive letters, UNC shares,
+forward slashes and surrogate pairs, on Linux. The odd-length test checks
+the exception message, so it fails if the length check is removed; without
+the check `streamly-core` reads past the buffer and throws a different
+exception.
 
 ## 7. No conversion for `OsString`
 
@@ -150,31 +172,38 @@ The module documentation now states this.
 
 ## 9. stack.yaml
 
-* `extra-deps` lists the streamly git repository twice at the same commit.
-  The first entry has no `subdirs`, so it builds the full `streamly`
-  package, which this package does not depend on. Only the `core` subdir is
-  needed.
+* `extra-deps` listed the streamly git repository twice at the same commit.
+  The first entry had no `subdirs`, so it built the full `streamly`
+  package, which this package does not depend on.
 * `streamly-core-0.3.x` is on Hackage; a Hackage version in `extra-deps` is
   preferable to a git commit.
 * The `extra-include-dirs: /opt/local/include` (MacPorts SDL) and
-  `flags: mintty` entries are not needed by this package.
+  `flags: mintty` entries were not needed by this package.
 
-These were not changed, since the stack build was not tested in this audit.
+Fix: `stack.yaml` now uses `resolver: lts-22.44` (GHC 9.6.7, `filepath`
+1.4.301.0, `os-string` 2.0.7, `streamly-core` 0.2.3) with
+`streamly-core-0.3.3` from Hackage as the only extra-dep, and limits the GHC
+heap (item 10). `stack test` builds and passes.
 
 ## 10. Build heap limit and flake input
 
-* The build does not limit the GHC heap. Adding the following to
-  `cabal.project` caps each GHC process at 3 GB:
+* The build did not limit the GHC heap. `cabal.project` now caps each GHC
+  process at 3 GB:
 
   ```
   package *
     ghc-options: +RTS -M3G -RTS
   ```
 
-  The test suite now has an RTS heap limit (item 5).
-* `flake.nix` fetches `basepkgs` with `git+ssh://`, which requires an SSH key
-  with access to `composewell/streamly-packages`. If that repository is
-  public, a `github:` URL works without a key.
+  `stack.yaml` sets the same option for `$everything`. The test suite runs
+  with an RTS heap limit of 1 GB (item 5).
+* `flake.nix` fetched `basepkgs` with `git+ssh://`, which requires an SSH
+  key with access to `composewell/streamly-packages`. It now uses
+  `git+https://`, which needs no key for a public repository and uses the git
+  credential helper for a private one. `flake.lock` was regenerated with
+  `nix flake lock`; the locked revision
+  `71f2b6792a9f64be2c4bca5050cb1e08edd625b2` and its `narHash` are
+  unchanged.
 
 ## 11. Non-ASCII paths from `Path.fromString` in streamly-core 0.3.0
 
@@ -198,13 +227,24 @@ Users who build paths from non-ASCII strings should use 0.3.1 or later.
 
 GHC 9.6.7 on Linux, with the RTS heap limit `-M3G` for GHC:
 
-| streamly-core | filepath  | os-string | Result |
-|---------------|-----------|-----------|--------|
-| 0.3.3         | 1.4.300.1 | 2.0.11    | Build and tests pass |
-| 0.3.3         | 1.5.5.0   | 2.0.11    | Build and tests pass |
-| 0.3.1         | 1.4.300.1 | 2.0.11    | Build and tests pass |
-| 0.3.0         | 1.4.300.1 | 2.0.11    | Library builds, tests fail: item 11 |
+| Tool  | streamly-core | filepath  | os-string | Result |
+|-------|---------------|-----------|-----------|--------|
+| cabal | 0.3.3         | 1.4.300.1 | 2.0.11    | Build and tests pass |
+| cabal | 0.3.3         | 1.5.5.0   | 2.0.11    | Build and tests pass |
+| cabal | 0.3.1         | 1.4.300.1 | 2.0.11    | Build and tests pass |
+| cabal | 0.3.0         | 1.4.300.1 | 2.0.11    | Library builds; see item 11 |
+| stack | 0.3.3         | 1.4.301.0 | 2.0.7     | Build and tests pass |
 
-Replacing `unsafeCloneSlice start` by `unsafeCloneSlice 0` in
-`fromOsWordArray` makes the offset tests fail, so the tests exercise the
-copying branch. The Windows code paths were not compiled.
+The library builds without warnings under `-Weverything`, and `cabal
+haddock` reports no warnings.
+
+Two mutations were checked against the test suite. Replacing
+`unsafeCloneSlice start` by `unsafeCloneSlice 0` in `toShortByteString`
+makes the offset tests fail, so the tests exercise the copying branch.
+Removing `checkWordSize` from `Streamly.Compat.WindowsPath.toPath` makes the
+odd-length test fail.
+
+The Windows-only code paths of `Streamly.Compat.OsPath` and
+`Streamly.Compat.OsString` (selected by `mingw32_HOST_OS`) were not
+compiled. `Streamly.Compat.WindowsPath` is platform independent and was
+tested on Linux.
